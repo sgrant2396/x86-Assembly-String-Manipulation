@@ -1,0 +1,198 @@
+; Microcomputer Design Final Project
+; Written By: Sean Grant
+
+.586                                               ; Signifies that we are using the x86 architecture 
+.MODEL FLAT                                        ; Using the flat model of memory 
+INCLUDE io.h                                       ; header file for input/output
+.STACK 4096                                        ; reserves 4096 Byte stack
+
+.DATA
+prompt1 BYTE "ENTER A STRING: ", 0                 ; prompt for the user to enter a string
+stringIn BYTE 101 DUP (?)                          ; array of 100 bytes (holds 100 chracters), used to store the input string in memory
+stringPrompt BYTE "SELECT STRING OPTION: ", 0      ; prompt for the user to choose an option
+selectionOption1 BYTE "1 ---> Report the length of the string", 0Ah,
+                      "2 ---> List positions of a character in the string", 0Ah,
+					  "3 ---> List positions of a word in the string", 0Ah,
+					  "4 ---> Convert lowercase to uppercase", 0 
+optionPrompt BYTE "ENTER YOUR SELECTION: ", 0      ; prompt for the user to enter which option they are choosing
+optionPicked DWORD 0                               ; variable in memory that holds the user's selection
+
+lengthPrompt BYTE "Length Of String: ", 0          ; Label for printing the length of the string
+lengthVariable1 DWORD 0                            ; variable in memory that holds the value of the length 
+lengthVariable2 BYTE 11 DUP (?)                    ; variable in memory that holds the ASCII converted length of string
+
+charSearchPrompt BYTE "ENTER A CHARACTER TO SEARCH FOR: ", 0    ; prompt for the user to enter a character
+charPicked BYTE 0                                  ; variable in memory that holds the character we are searching for
+charPositionArray BYTE 100 DUP (?)                 ; array that will hold all of the ASCII position values to be printed.  IMPORTANT! This is used for char and word searching
+charPositionLabel BYTE "That Character Is At Position(s): ", 0  ; label for printing the positions of desired character
+tempVariable BYTE 11 DUP (?)                       ; temp variable that is used in the decimal to ASCII conversion. IMPORTANT! This is used for char and word searching
+
+wordSearchPrompt BYTE "ENTER A WORD TO SEARCH FOR: ", 0         ; prompt for the user to enter a word
+wordPicked BYTE 20 DUP (?)                         ; variable that will hold the word entered by the user (word should not be longer than 20 characters)
+lengthOfWord DWORD 0
+wordPositionLabel BYTE "That Word Starts At Position(s): ", 0   ; label for printing the positions of desired word
+startingAddress DWORD 0                            ; variable in memory that will hold the initial address of the string for later computation
+potentialPosition DWORD 0                          ; variable in memory that holds the address of the possible first character of the word that was found in the string
+
+stringTransLabel BYTE "String Has Been Converted To Uppercase: ", 0   ; label for printing the resulting string after the translation
+table BYTE 48 DUP (' '), "0123456789", 7 DUP (' ')                    ; table used for the translation of lowercase letters to uppercase
+      BYTE "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 6 DUP (' ')
+	  BYTE "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 133 DUP (' ')
+
+.CODE
+_MainProc PROC
+    input prompt1, stringIn, 101            ; User input string (up to 100 characters) stored in "stringIn" variable
+	output stringPrompt, selectionOption1   ; Outputs the selection menu for the user to pick a string function
+	input optionPrompt, optionPicked, 2     ; IMPORTANT: ONLY INPUT ONE CHARACTER! User inputs their selection
+	atod optionPicked                       ; The value user enters is converted from ASCII to decimal 
+	cmp eax, 1                              ; Compare the value entered to 1
+	je lengthOfString                       ; jump to the section that calls the cooresponding procedure 
+	cmp eax, 2                              ; Compare the value entered to 2
+	je positionOfChar                       ; jump to the section that calls the cooresponding procedure
+	cmp eax, 3                              ; Compare the value entered to 3
+	je positionOfWord                       ; jump to the section that calls the cooresponding procedure
+	cmp eax, 4                              ; Compare the value entered to 4
+	je lowerToUpper                         ; jump to the section that calls the cooresponding procedure
+
+lengthOfString:                             ; label for the section of code that calls the printStringLength procedure
+	call printStringLength                  ; procedure call: print the length of the string
+	jmp endOfCode                           ; Once execution returns from the procedure, jump to the section that ends the code
+
+positionOfChar:                             ; label for the section of code that calls the getCharPosition procedure
+	input charSearchPrompt, charPicked, 2   ; IMPORTANT: ONLY INPUT ONE CHARACTER! User enters a character to search for
+	mov dl, charPicked                      ; move the character entered to the lower byte of edx 
+	call getCharPosition                    ; procedure call: print the positions of a specific character
+	jmp endOfCode                           ; Once execution returns from the procedure, jump to the section that ends the code
+
+positionOfWord:                             ; label for the section of code that calls the getWordPosition procedure
+	input wordSearchPrompt, wordPicked, 20  ; user inputs a word of up to 20 characters to search for
+	call getWordPosition                    ; procedure call: print the positions of a specific word
+	jmp endOfCode                           ; Once execution returns from the procedure, jump to the section that ends the code
+
+lowerToUpper:                               ; label for the section of code that calls the convertLowerUpper procedure
+	call convertLowerUpper                  ; procedure call: converts all lower case letters in the string to uppercase letters
+	jmp endOfCode                           ; Once execution returns from the procedure, jump to the section that ends the code
+
+endOfCode:                                  ; label for the section of code that exits the entire program             
+	mov eax, 0		                        ; re initialize eax
+	ret                                     ; return
+_MainProc ENDP
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+printStringLength PROC                      ; This procedure calculates and prints the length of the string entered
+	    push ebp                            ; push ebp onto the stack
+		mov ebp, esp                        ; set esp at the same location as ebp
+		lea ebx, stringIn                   ; put the address of the first character in the string in ebx
+		mov eax, 0                          ; initialize EAX counter = 0
+whileNoNull: cmp BYTE PTR [ebx], 00h        ; compare the character in the string to the NULL character (end of the string)
+             je endwhileNoNull              ; if we are at the end of the string stop the counter
+			 inc eax                        ; IMPORTANT: increment the counter 
+			 inc ebx                        ; increment address to check the next character in the string
+			 jmp whileNoNull                ; jump back to the start of the loop
+endwhileNoNull: mov lengthVariable1, 0      ; initialize the variable that will hold the ASCII code for the counter 
+                dtoa lengthVariable1, eax   ; convert the value in the counter from decimal to ASCII
+                output lengthPrompt, lengthVariable2 ; print the length of the string 
+		        pop ebp                     ; pop ebp from te stack before exiting the procedure
+		        ret                         ; return to main code
+printStringLength ENDP
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+getCharPosition PROC                        ; This procedure tracks the position of a character in the string 
+		push ebp                            ; push ebp onto the stack
+		mov ebp, esp                        ; set esp at the same location as ebp
+		lea eax, stringIn                   ; put the address of the first character in the string in eax
+		mov ebx, eax                        ; holds the initial address (address of the 1st character) of the string
+		lea edi, charPositionArray          ; edi holds the initial address of the first element in the array
+loopThroughString:                          ; label that indicates the beginning of the loop
+        cmp BYTE PTR [eax], 00h             ; compare the character in the string to the NULL character
+		je endTheLoop                       ; if it is the NULL character, end the loop
+		cmp BYTE PTR [eax], dl              ; IMPORTANT! Compare the character in the string to the caracter the user entered
+		jne nextChar                        ; if they are not the same character move on to the next one
+		mov ecx, eax                        ; if they are the same chaacter, save the address of that character in the string
+	    sub ecx, ebx                        ; IMPORTANT! subtract the initial address from the address of the current character 
+		inc ecx                             ; position of character found is now in ECX
+		dtoa tempVariable, ecx              ; convert the position to ASCII character so it can be printed
+		lea esi, tempVariable               ; moves the address of the first byte of the variable in esi
+		mov ecx, 11                         ; prepares to move 11 bytes into the array in order to correctly convert to ASCII (rep uses ECX as counter)
+		rep movsb                           ; moves each byte from the variable to the array 
+		mov BYTE PTR [edi], 2Ch             ; add a comma in between each character in the array
+		inc edi                             ; increment edi to prepare to load the next position value into the array at the next element
+nextChar: inc eax                           ; increment eax to move onto the next character in the string
+		  jmp loopThroughString             ; jump to the top of the loop
+endTheLoop:                                 ; label for the section of code that exits the loop and prints the positions of that character
+          output charPositionLabel, charPositionArray   ; print the array that holds the positions
+		  pop ebp                           ; pop ebp off the stack
+		  ret                               ; return to main code
+getCharPosition ENDP
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+getWordPosition PROC
+        push ebp                            ; push ebp onto the stack
+		mov ebp, esp                        ; set esp at the same location as ebp
+		lea ebx, wordPicked                 ; put the address of the first character in the word in ebx
+		mov eax, 0                          ; initialize EAX counter = 0
+continueLoop: cmp BYTE PTR [ebx], 00h       ; compare the character in the word to the NULL character (end of the word)
+             je endTheLoop                  ; if we are at the end of the word stop the counter
+			 inc eax                        ; IMPORTANT: increment the counter 
+			 inc ebx                        ; increment address to check the next character in the word
+			 jmp continueLoop               ; jump back to the start of the loop
+endTheLoop:  mov lengthOfWord, eax          ; save the length of the word in memory
+              lea eax, stringIn             ; put the address of the first character in the string in eax
+			  mov startingAddress, eax      ; saves the address of the first character in the string im a variable in memory
+			  lea edi, charPositionArray    ; sets the destination register edi to the address of the array that will hold each position
+searchForFirstLetter:                       ; label that indicates the beginning of the loop
+             lea ebx, wordPicked            ; put the address of the first character in the word in ebx
+			 mov dl, BYTE PTR [ebx]         ; hold the first character of the word in dl
+             cmp BYTE PTR [eax], 00h        ; compare the character in the string to the NULL character
+		     je exitTheLoop                 ; if it is the NULL character, end the loop
+		     cmp BYTE PTR [eax], dl         ; IMPORTANT! Compare the character in the string with the first character of the word
+		     jne moveToNextChar             ; if they are not the same character move on to the next one
+		     mov ecx, eax                   ; if they are the same chaacter, save the address of that character in the string
+	         sub ecx, startingAddress       ; IMPORTANT! subtract the initial address from the address of the current character 
+		     inc ecx                        ; increment ecx to obtain the actual position value of the word being searched for
+			 mov potentialPosition, ecx     ; save that position value in a variable in memory until we know if the word 
+			 mov ecx, 1                     ; prepare ecx to be used as a counter to loop through the rest of the letters in the word
+nestedLoop:  inc ebx                        ; increment ebx to check the next letter in the word
+             inc eax                        ; increment eax to check the next letter in the string
+			 cmp ecx, lengthOfWord          ; compare value in ecx to the number of characters in the word being searched for
+			 je addToArray                  ; if we have checked all letters in the word exit this loop
+			 mov dl, BYTE PTR [ebx]         ; move the letter within the word to the dl register
+			 cmp BYTE PTR [eax], dl         ; compare whats in the dl register to the character in the string we are indexed to
+			 jne moveToNextChar             ; if the two characters are not the same, the word is not a match. move on to keep checking the string
+			 inc ecx                        ; increment the counter
+			 jmp nestedLoop                 ; jump back to the beginning of the nestd loop that checks each character of the word
+addToArray:  mov ecx, potentialPosition     ; if execution reaches this section the word was a match. move position of 1st character in ecx
+             dtoa tempVariable, ecx         ; convert the position value from decimal to ASCII
+             lea esi, tempVariable          ; put the address of the variable with the ASCII character in the source register esi.
+			 mov ecx, 11                    ; prepare ecx to count 11 bytes to copy into the array that will be printed
+			 rep movsb                      ; copy each of the 11 bytes into the array (address is in edi)
+			 mov BYTE PTR [edi], 2Ch        ; add a comma after each value ASCII value that is put in the array
+			 inc edi                        ; go to the next index in the array to prepare to copy the next value
+			 jmp searchForFirstLetter       ; jump to the top of the loop
+moveToNextChar: inc eax                     ; increment eax to move onto the next character in the string
+		        jmp searchForFirstLetter    ; jump to the top of the loop
+exitTheLoop:    output wordPositionLabel, charPositionArray   ; print the array that holds all of the position values
+                pop ebp                     ; pop ebp off of the stack
+	           	ret                         ; return
+getWordPosition ENDP              
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+convertLowerUpper PROC
+		push ebp                            ; push ebp onto the stack    
+		mov ebp, esp                        ; set esp at the same location as ebp
+		lea ebx, stringIn                   ; put the address of the first character in the string in ebx
+		mov eax, 0                          ; initialize EAX counter = 0
+whileNoNullChar: cmp BYTE PTR [ebx], 00h    ; compare the character in the string to the NULL character (end of the string)
+             je endwhileNoNullChar          ; if we are at the end of the string stop the counter
+			 inc eax                        ; IMPORTANT: increment the counter 
+			 inc ebx                        ; increment address to check the next character in the string
+			 jmp whileNoNullChar            ; jump back to the start of the loop
+endwhileNoNullChar: mov ecx, eax            ; moves the length of the string into ecx
+                    lea ebx, table          ; put the address of the table in ebx
+					lea esi, stringIn       ; put the address of the 1st character in the string in esi (source)
+					lea edi, stringIn       ; put the address of the 1st character in the string in edi (destination)
+loopThroughString:  lodsb                   ; copies each character of the string to AL
+                    xlat                    ; translates that character by going to the look up table at the address of AL
+					stosb                   ; replaces that character in the string with the character from the lookup table 
+                    loop loopThroughString  ; loop through the entire string
+					output stringTransLabel, stringIn  ; print out the new string with all the uppercase letters
+		            pop ebp                 ; pop ebp off the stack
+		            ret                     ; return to main code
+convertLowerUpper ENDP
+END
